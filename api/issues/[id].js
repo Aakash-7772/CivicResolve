@@ -2,46 +2,40 @@ import {
   DEPARTMENTS,
   ISSUE_STATUSES,
   PRIORITY_LEVELS,
-  sanitizeText,
-  type CivicDepartment,
-  type IssueStatus,
-  type PriorityLevel,
-} from '../../src/lib/civicLogic.js';
-import {
-  extractQueryParam,
+  extractIssueId,
   issuesStore,
   parseJsonBody,
-  type VercelRequest,
-  type VercelResponse,
-} from '../_lib/civicServer';
+  sanitizeText,
+  sendJson,
+} from '../_lib/civicServer.js';
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req, res) {
   if (req.method !== 'PATCH') {
     res.setHeader('Allow', 'PATCH');
-    res.status(405).json({ error: 'Method not allowed.' });
+    sendJson(res, 405, { error: 'Method not allowed.' });
     return;
   }
 
-  const id = extractQueryParam(req, 'id');
+  const id = extractIssueId(req);
   const issue = issuesStore.find((item) => item.id === id);
   if (!issue) {
-    res.status(404).json({ error: 'Ticket not found.' });
+    sendJson(res, 404, { error: 'Ticket not found.' });
     return;
   }
 
   const body = await parseJsonBody(req);
-  const nextStatus = sanitizeText(body.status ?? '', 30) as IssueStatus;
-  const nextPriority = sanitizeText(body.priority ?? '', 30) as PriorityLevel;
-  const nextDepartment = sanitizeText(body.department ?? '', 80) as CivicDepartment;
+  const nextStatus = sanitizeText(body.status ?? '', 30);
+  const nextPriority = sanitizeText(body.priority ?? '', 30);
+  const nextDepartment = sanitizeText(body.department ?? '', 80);
   const resolutionNotes =
     typeof body.resolutionNotes === 'string' ? sanitizeText(body.resolutionNotes, 600) : undefined;
 
   const now = new Date().toISOString();
-  const changes: string[] = [];
+  const changes = [];
 
   if (nextStatus) {
     if (!ISSUE_STATUSES.includes(nextStatus)) {
-      res.status(400).json({ error: 'Invalid status value.' });
+      sendJson(res, 400, { error: 'Invalid status value.' });
       return;
     }
     if (issue.status !== nextStatus) {
@@ -52,7 +46,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (nextPriority) {
     if (!PRIORITY_LEVELS.includes(nextPriority)) {
-      res.status(400).json({ error: 'Invalid priority value.' });
+      sendJson(res, 400, { error: 'Invalid priority value.' });
       return;
     }
     if (issue.priority !== nextPriority) {
@@ -63,7 +57,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (nextDepartment) {
     if (!DEPARTMENTS.includes(nextDepartment)) {
-      res.status(400).json({ error: 'Invalid department value.' });
+      sendJson(res, 400, { error: 'Invalid department value.' });
       return;
     }
     if (issue.department !== nextDepartment) {
@@ -88,5 +82,5 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   }
 
-  res.status(200).json({ issue });
+  sendJson(res, 200, { issue });
 }

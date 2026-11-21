@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import {
   AlertOctagon,
   AlertTriangle,
@@ -9,7 +10,14 @@ import {
 } from 'lucide-react';
 import type { IssueStatus, PriorityLevel } from '../lib/civicLogic.js';
 
-export function PriorityIndicator({ priority }: { priority: PriorityLevel }) {
+/**
+ * Renders an accessible unboxed urgency indicator combining semantic icon and label.
+ */
+export const PriorityIndicator = memo(function PriorityIndicator({
+  priority,
+}: {
+  priority: PriorityLevel;
+}) {
   switch (priority) {
     case 'Critical':
       return (
@@ -41,9 +49,12 @@ export function PriorityIndicator({ priority }: { priority: PriorityLevel }) {
         </span>
       );
   }
-}
+});
 
-export function StatusIndicator({ status }: { status: IssueStatus }) {
+/**
+ * Renders an accessible unboxed workflow status indicator combining icon and label.
+ */
+export const StatusIndicator = memo(function StatusIndicator({ status }: { status: IssueStatus }) {
   switch (status) {
     case 'Resolved':
       return (
@@ -68,4 +79,4 @@ export function StatusIndicator({ status }: { status: IssueStatus }) {
         </span>
       );
   }
-}
+});

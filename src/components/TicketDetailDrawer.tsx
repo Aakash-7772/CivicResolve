@@ -1,15 +1,26 @@
-import { useEffect, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { X, ThumbsUp, MapPin, ShieldCheck, ImageOff } from 'lucide-react';
 import type { CivicIssue } from '../lib/civicLogic.js';
 import { PriorityIndicator, StatusIndicator } from './StatusIndicator.tsx';
 
-interface TicketDetailDrawerProps {
+/**
+ * Props for the TicketDetailDrawer audit and inspection dialog.
+ */
+export interface TicketDetailDrawerProps {
   issue: CivicIssue | null;
   onClose: () => void;
   onUpvote: (id: string) => void;
 }
 
-export function TicketDetailDrawer({ issue, onClose, onUpvote }: TicketDetailDrawerProps) {
+/**
+ * Accessible slide-over modal dialog displaying full AI dispatch metadata,
+ * attached evidence, resolution notes, and chronological status history.
+ */
+export const TicketDetailDrawer = memo(function TicketDetailDrawer({
+  issue,
+  onClose,
+  onUpvote,
+}: TicketDetailDrawerProps) {
   const [imageError, setImageError] = useState(false);
 
   useEffect(() => {
@@ -168,4 +179,4 @@ export function TicketDetailDrawer({ issue, onClose, onUpvote }: TicketDetailDra
       </div>
     </div>
   );
-}
+});

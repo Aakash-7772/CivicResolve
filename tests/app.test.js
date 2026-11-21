@@ -199,7 +199,8 @@ test('15. Security scan: no hardcoded Google/Gemini API keys exist in source or 
     'server.ts',
     'src/App.tsx',
     'src/lib/civicLogic.js',
-    'src/components/CitizenReportPanel.tsx',
+    'src/components/IssueForm.tsx',
+    'api/_lib/civicServer.js',
   ];
   for (const relPath of filesToInspect) {
     const content = fs.readFileSync(path.join(ROOT_DIR, relPath), 'utf8');
@@ -207,7 +208,7 @@ test('15. Security scan: no hardcoded Google/Gemini API keys exist in source or 
   }
 });
 
-test('16. Accessibility & HTML landmark structure check on index.html and App.tsx', () => {
+test('16. Accessibility & HTML landmark structure check on index.html, App.tsx, and IssueForm.tsx', () => {
   const indexHtml = fs.readFileSync(path.join(ROOT_DIR, 'index.html'), 'utf8');
   assert.ok(indexHtml.includes('<title>CivicResolve'));
   assert.ok(indexHtml.includes('lang="en"'));
@@ -220,7 +221,7 @@ test('16. Accessibility & HTML landmark structure check on index.html and App.ts
   assert.ok(appTsx.includes('<footer'));
 
   const formTsx = fs.readFileSync(
-    path.join(ROOT_DIR, 'src/components/CitizenReportPanel.tsx'),
+    path.join(ROOT_DIR, 'src/components/IssueForm.tsx'),
     'utf8'
   );
   assert.ok(formTsx.includes('htmlFor="issue-title"'));
@@ -228,4 +229,26 @@ test('16. Accessibility & HTML landmark structure check on index.html and App.ts
   assert.ok(formTsx.includes('htmlFor="issue-category"'));
   assert.ok(formTsx.includes('htmlFor="issue-description"'));
   assert.ok(formTsx.includes('aria-label='));
+});
+
+test('17. Modular component decomposition and Vercel security/cache headers check', () => {
+  const requiredComponents = [
+    'src/components/TelemetryBar.tsx',
+    'src/components/IssueForm.tsx',
+    'src/components/IssueTracker.tsx',
+    'src/components/AdminConsole.tsx',
+    'src/components/DepartmentWorkload.tsx',
+  ];
+  for (const compPath of requiredComponents) {
+    const content = fs.readFileSync(path.join(ROOT_DIR, compPath), 'utf8');
+    assert.ok(content.includes('/**'), `Missing JSDoc in ${compPath}`);
+  }
+
+  const vercelConfig = JSON.parse(fs.readFileSync(path.join(ROOT_DIR, 'vercel.json'), 'utf8'));
+  const allHeaders = vercelConfig.headers.flatMap((entry) => entry.headers);
+  const headerKeys = new Set(allHeaders.map((h) => h.key));
+  assert.ok(headerKeys.has('X-Content-Type-Options'));
+  assert.ok(headerKeys.has('X-Frame-Options'));
+  assert.ok(headerKeys.has('Referrer-Policy'));
+  assert.ok(headerKeys.has('Cache-Control'));
 });

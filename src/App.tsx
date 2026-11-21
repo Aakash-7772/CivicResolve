@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import { Download, Printer } from 'lucide-react';
 import {
   INITIAL_SEED_ISSUES,
@@ -7,20 +7,37 @@ import {
   formatAuditReportCsv,
   generateTicketId,
   sanitizeText,
-  type CivicDepartment,
   type CivicIssue,
   type ClassificationResult,
-  type IssueStatus,
-  type PriorityLevel,
 } from './lib/civicLogic.js';
-import { DepartmentWorkloadPanel, TelemetryStrip } from './components/TelemetryStrip.tsx';
-import { CitizenReportPanel } from './components/CitizenReportPanel.tsx';
-import { IssueTrackerView } from './components/IssueTrackerView.tsx';
-import { AdminConsoleView } from './components/AdminConsoleView.tsx';
-import { TicketDetailDrawer } from './components/TicketDetailDrawer.tsx';
+import { TelemetryBar } from './components/TelemetryBar.tsx';
+import { DepartmentWorkload } from './components/DepartmentWorkload.tsx';
+import { IssueForm, type IssueDraftPayload } from './components/IssueForm.tsx';
+import type { AdminIssuePatch } from './components/AdminConsole.tsx';
+
+const IssueTracker = lazy(() =>
+  import('./components/IssueTracker.tsx').then((m) => ({ default: m.IssueTracker }))
+);
+const AdminConsole = lazy(() =>
+  import('./components/AdminConsole.tsx').then((m) => ({ default: m.AdminConsole }))
+);
+const TicketDetailDrawer = lazy(() =>
+  import('./components/TicketDetailDrawer.tsx').then((m) => ({ default: m.TicketDetailDrawer }))
+);
 
 type ActiveTab = 'report' | 'tracker' | 'admin' | 'workload';
 
+const NAV_ITEMS: ReadonlyArray<{ id: ActiveTab; label: string }> = [
+  { id: 'report', label: 'Report Issue' },
+  { id: 'tracker', label: 'Issue Tracker' },
+  { id: 'admin', label: 'Admin Console' },
+  { id: 'workload', label: 'Department Load' },
+];
+
+/**
+ * Root CivicResolve application shell orchestrating citizen reporting, AI triage,
+ * issue tracking, administrator dispatch management, and live civic telemetry.
+ */
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('report');
   const [issues, setIssues] = useState<CivicIssue[]>(INITIAL_SEED_ISSUES);
@@ -56,13 +73,7 @@ export default function App() {
   );
 
   const handleAnalyzePreview = useCallback(
-    async (draft: {
-      title: string;
-      location: string;
-      category: string;
-      description: string;
-      imageDataUrl: string;
-    }): Promise<ClassificationResult> => {
+    async (draft: IssueDraftPayload): Promise<ClassificationResult> => {
       setApiStatusError('');
       try {
         const res = await fetch('/api/analyze', {
@@ -113,13 +124,7 @@ export default function App() {
   );
 
   const handleSubmitIssue = useCallback(
-    async (draft: {
-      title: string;
-      location: string;
-      category: string;
-      description: string;
-      imageDataUrl: string;
-    }): Promise<{ issue: CivicIssue; notice?: string }> => {
+    async (draft: IssueDraftPayload): Promise<{ issue: CivicIssue; notice?: string }> => {
       setApiStatusError('');
       try {
         const res = await fetch('/api/issues', {
@@ -138,7 +143,6 @@ export default function App() {
         }
         throw new Error(data.error || 'Unable to submit issue.');
       } catch (err) {
-        // Resilient client-side fallback when running without live backend
         const localTriage = classifyIssueRuleBased({
           title: draft.title,
           description: draft.description,
@@ -208,15 +212,7 @@ export default function App() {
   }, []);
 
   const handleAdminUpdateIssue = useCallback(
-    async (
-      id: string,
-      patch: {
-        status?: IssueStatus;
-        priority?: PriorityLevel;
-        department?: CivicDepartment;
-        resolutionNotes?: string;
-      }
-    ) => {
+    async (id: string, patch: AdminIssuePatch) => {
       const now = new Date().toISOString();
       setIssues((prev) =>
         prev.map((item) => {
@@ -275,7 +271,7 @@ export default function App() {
     []
   );
 
-  function handleExportAuditCsv() {
+  const handleExportAuditCsv = useCallback(() => {
     const csv = formatAuditReportCsv(issues);
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -288,18 +284,22 @@ export default function App() {
     URL.revokeObjectURL(url);
     setExportNotice(`Exported ${issues.length} civic tickets to CSV audit report.`);
     setTimeout(() => setExportNotice(''), 4000);
-  }
+  }, [issues]);
 
-  function handlePrintAudit() {
+  const handlePrintAudit = useCallback(() => {
     window.print();
-  }
+  }, []);
 
-  const navItems: Array<{ id: ActiveTab; label: string }> = [
-    { id: 'report', label: 'Report Issue' },
-    { id: 'tracker', label: 'Issue Tracker' },
-    { id: 'admin', label: 'Admin Console' },
-    { id: 'workload', label: 'Department Load' },
-  ];
+  const handleInspectIssue = useCallback((issue: CivicIssue) => {
+    setSelectedIssueId(issue.id);
+  }, []);
+
+  const handleCloseDrawer = useCallback(() => {
+    setSelectedIssueId(null);
+  }, []);
+
+  const handleOpenTracker = useCallback(() => setActiveTab('tracker'), []);
+  const handleOpenReport = useCallback(() => setActiveTab('report'), []);
 
   return (
     <div className="min-h-screen bg-[#0B0F19] text-[#F8FAFC] flex flex-col">
@@ -310,7 +310,6 @@ export default function App() {
         Skip to main content
       </a>
 
-      {/* Clean 3-Zone Top Bar Contract */}
       <header className="no-print border-b border-[#1E293B] bg-[#0B0F19]">
         <div className="max-w-[1360px] mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-8">
           <a
@@ -325,7 +324,7 @@ export default function App() {
           </a>
 
           <nav aria-label="Primary navigation" className="hidden md:flex items-center gap-6">
-            {navItems.map((item) => {
+            {NAV_ITEMS.map((item) => {
               const isActive = activeTab === item.id;
               return (
                 <button
@@ -358,12 +357,11 @@ export default function App() {
           </div>
         </div>
 
-        {/* Mobile Navigation Strip */}
         <nav
           aria-label="Mobile primary navigation"
           className="md:hidden border-t border-[#1E293B] px-4 py-2 flex items-center gap-4 overflow-x-auto"
         >
-          {navItems.map((item) => {
+          {NAV_ITEMS.map((item) => {
             const isActive = activeTab === item.id;
             return (
               <button
@@ -408,47 +406,61 @@ export default function App() {
           </div>
         )}
 
-        {/* Live Civic Telemetry KPIs */}
-        <TelemetryStrip telemetry={telemetry} />
+        <TelemetryBar telemetry={telemetry} />
 
-        {/* Active Workspace View */}
         {activeTab === 'report' && (
           <div className="space-y-6">
-            <CitizenReportPanel
+            <IssueForm
               issues={issues}
               onAnalyzePreview={handleAnalyzePreview}
               onSubmitIssue={handleSubmitIssue}
               onUpvote={handleUpvote}
-              onInspectIssue={(issue) => setSelectedIssueId(issue.id)}
-              onOpenTracker={() => setActiveTab('tracker')}
+              onInspectIssue={handleInspectIssue}
+              onOpenTracker={handleOpenTracker}
             />
-            <DepartmentWorkloadPanel telemetry={telemetry} />
+            <DepartmentWorkload telemetry={telemetry} />
           </div>
         )}
 
         {activeTab === 'tracker' && (
-          <IssueTrackerView
-            issues={issues}
-            onUpvote={handleUpvote}
-            onInspectIssue={(issue) => setSelectedIssueId(issue.id)}
-            onReportNew={() => setActiveTab('report')}
-          />
+          <Suspense
+            fallback={
+              <div className="bg-[#111827] border border-[#1E293B] rounded-lg p-6 text-sm text-[#94A3B8]">
+                Loading issue tracker...
+              </div>
+            }
+          >
+            <IssueTracker
+              issues={issues}
+              onUpvote={handleUpvote}
+              onInspectIssue={handleInspectIssue}
+              onReportNew={handleOpenReport}
+            />
+          </Suspense>
         )}
 
         {activeTab === 'admin' && (
           <div className="space-y-6">
-            <AdminConsoleView
-              issues={issues}
-              onUpdateIssue={handleAdminUpdateIssue}
-              onInspectIssue={(issue) => setSelectedIssueId(issue.id)}
-            />
-            <DepartmentWorkloadPanel telemetry={telemetry} />
+            <Suspense
+              fallback={
+                <div className="bg-[#111827] border border-[#1E293B] rounded-lg p-6 text-sm text-[#94A3B8]">
+                  Loading administrator console...
+                </div>
+              }
+            >
+              <AdminConsole
+                issues={issues}
+                onUpdateIssue={handleAdminUpdateIssue}
+                onInspectIssue={handleInspectIssue}
+              />
+            </Suspense>
+            <DepartmentWorkload telemetry={telemetry} />
           </div>
         )}
 
         {activeTab === 'workload' && (
           <div className="space-y-6">
-            <DepartmentWorkloadPanel telemetry={telemetry} />
+            <DepartmentWorkload telemetry={telemetry} />
             <div className="bg-[#111827] border border-[#1E293B] rounded-lg p-6 flex flex-wrap items-center justify-between gap-4">
               <div className="space-y-1">
                 <h2 className="text-base font-semibold text-[#F8FAFC]">
@@ -503,11 +515,15 @@ export default function App() {
         </div>
       </footer>
 
-      <TicketDetailDrawer
-        issue={selectedIssue}
-        onClose={() => setSelectedIssueId(null)}
-        onUpvote={handleUpvote}
-      />
+      {selectedIssue && (
+        <Suspense fallback={null}>
+          <TicketDetailDrawer
+            issue={selectedIssue}
+            onClose={handleCloseDrawer}
+            onUpvote={handleUpvote}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }
